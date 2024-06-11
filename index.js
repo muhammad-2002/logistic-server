@@ -78,24 +78,111 @@ async function run() {
 
     })
     // my-parcel
-    app.get('/my-parcel',async(req,res)=>{
-      const result = await bookParcelCollection.find().toArray()
+    app.get('/my-parcel/:email',async(req,res)=>{
+      const email = req.params.email
+      const  query = {email:email}
+      const result = await bookParcelCollection.find(query).toArray()
       res.send(result)
     })
-    // delete my parcel
+    // my-parcel delete item
     app.delete('/my-parcel/:id',async(req,res)=>{
       const id = req.params.id
-      const query = {_id:new ObjectId(id)}
-      const result =await bookParcelCollection.deleteOne(query)
+      const  query = {_id:new ObjectId(id)}
+      const result = await bookParcelCollection.deleteOne(query)
       res.send(result)
-      
-
     })
+    // my-parcel
+    app.get('/my-parcel', async (req, res) => {
+      const { startDate, endDate } = req.query;
+      const query = {};
+    
+      if (startDate && endDate) {
+        console.log(`Received startDate: ${startDate}, endDate: ${endDate}`);
+    
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+    
+        if (isNaN(start) || isNaN(end)) {
+          return res.status(400).send({ error: 'Invalid date format' });
+        }
+    
+        query.requestedDeliveryDate = {
+          $gte: start,
+          $lte: end
+        };
+      } else {
+        return res.status(400).send({ error: 'Both startDate and endDate are required' });
+      }
+    
+      try {
+        // Log all documents for debugging
+        const allDocuments = await bookParcelCollection.find({}).toArray();
+        console.log(`All documents: ${JSON.stringify(allDocuments, null, 2)}`);
+    
+        // Perform the query
+        const result = await bookParcelCollection.find(query).toArray();
+        console.log(`Query: ${JSON.stringify(query)}`); // Log the query
+        console.log(`Result: ${JSON.stringify(result)}`); // Log the result
+    
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: 'Internal Server Error' });
+      }
+    });
+    
+
+    
+    app.get('/users', async (req, res) => {
+      const { role } = req.query;
+    
+      const query = { role: role };
+      try {
+        const user = await userInfo.find(query).toArray();
+        
+        // For each user, count the number of parcels booked 
+        const usersWithParcelCount = await Promise.all(user.map(async user => {
+         
+          const parcels = await bookParcelCollection.find({ email: user.email }).toArray();
+      const parcelCount = parcels.length;
+      const totalSpent = parcels.reduce((sum, parcel) => sum + parcel.price, 0);
+          return {
+            ...user,
+            parcelCount: parcelCount,
+            totalSpent:totalSpent
+          };
+        }));
+        
+    
+        res.send({ user: usersWithParcelCount });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    app.patch('/users/:id',async(req,res)=>{
+      const id = req.params.id
+      const body = req.body
+      const query = {
+        _id:new ObjectId(id)
+      }
+      const updateDoc = {
+        $set: {
+          ...body,
+        },
+      };
+    
+
+      const result = await userInfo.updateOne(query,updateDoc)
+      res.send(result)
+    })
+    
     // my boking updated 
     app.patch('/update-parcel/:id',async(req,res)=>{
       const id = req.params.id
       const  data = req.body
       const query = {_id:new ObjectId(id)}
+      
       const updateDoc = {
         $set: {
           ...data,
@@ -104,6 +191,42 @@ async function run() {
       const result =await bookParcelCollection.updateOne(query,updateDoc)
       res.send(result)
 
+    })
+    // Delivery Man Related Api
+    app.get('/parcels', async (req, res) => {
+      try {
+        const { deliveryMan } = req.query;
+        const query ={email:deliveryMan}
+        console.log(query)
+        const parcels = await bookParcelCollection.find(query).toArray()
+        console.log(parcels)
+        res.send(parcels)
+      } catch (err) {
+        res.status(500).json({ message: err.message });
+      }
+    });
+    app.put('/parcels/:id',async(req,res)=>{
+      const id = req.params.id
+      const query = {_id:new ObjectId(id)}
+      const data = req.body
+      console.log(data)
+      const updateDoc = {
+        $set: {
+          ...data,
+        },
+      };
+      const result = await bookParcelCollection.updateOne(query,updateDoc)
+      res.send(result)
+    })
+    app.get('/delivery-man',async(req,res)=>{
+      const deliveryMan = req.query
+      if(deliveryMan.role === "deliveryMan"){
+        const query = {role:deliveryMan}
+        const result = await userInfo.find(deliveryMan).toArray()
+        res.send(result)
+      }else{
+        res.status(404).send({message:'not found'})
+      }
     })
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
