@@ -131,23 +131,21 @@ async function run() {
     });
     
     app.get("/users", async (req, res) => {
-      const { role } = req.query;
-
+      const { role, page = 1, limit = 5 } = req.query;
+    
       const query = { role: role };
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+    
       try {
-        const user = await userInfo.find(query).toArray();
-
-        // For each user, count the number of parcels booked
+        const userCursor = userInfo.find(query).skip(skip).limit(parseInt(limit));
+        const userCount = await userInfo.countDocuments(query);
+        const users = await userCursor.toArray();
+    
         const usersWithParcelCount = await Promise.all(
-          user.map(async (user) => {
-            const parcels = await bookParcelCollection
-              .find({ email: user.email })
-              .toArray();
+          users.map(async (user) => {
+            const parcels = await bookParcelCollection.find({ email: user.email }).toArray();
             const parcelCount = parcels.length;
-            const totalSpent = parcels.reduce(
-              (sum, parcel) => sum + parcel.price,
-              0
-            );
+            const totalSpent = parcels.reduce((sum, parcel) => sum + parcel.price, 0);
             return {
               ...user,
               parcelCount: parcelCount,
@@ -155,13 +153,18 @@ async function run() {
             };
           })
         );
-
-        res.send({ user: usersWithParcelCount });
+    
+        res.send({
+          users: usersWithParcelCount,
+          total: userCount,
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(userCount / parseInt(limit)),
+        });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
-
+    
     app.patch("/users/:id", async (req, res) => {
       const id = req.params.id;
       const body = req.body;
@@ -173,10 +176,16 @@ async function run() {
           ...body,
         },
       };
-
-      const result = await userInfo.updateOne(query, updateDoc);
-      res.send(result);
+    
+      try {
+        const result = await userInfo.updateOne(query, updateDoc);
+        res.send(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
     });
+    
+    
 
     // my boking updated
     app.patch("/update-parcel/:id", async (req, res) => {
