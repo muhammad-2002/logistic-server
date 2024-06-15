@@ -44,7 +44,8 @@ async function run() {
       res.send(result);
     });
     app.get("/users/:email", async (req, res) => {
-      const email = req.params.email;
+      const email = req?.params?.email;
+      console.log(email)
       const query = { email: email };
       const result = await userInfo.findOne(query);
       res.send(result);
@@ -84,54 +85,51 @@ async function run() {
       res.send(result);
     });
     // my-parcel delete item
-    app.delete("/my-parcel/:id", async (req, res) => {
+    app.patch("/my-parcel/:id", async (req, res) => {
       const id = req.params.id;
+      const body = req.body;
+      const updateDoc = {
+        $set:{
+          ...body
+        }
+      }
       const query = { _id: new ObjectId(id) };
-      const result = await bookParcelCollection.deleteOne(query);
+      const result = await bookParcelCollection.updateOne(query,updateDoc);
       res.send(result);
     });
     // my-parcel
     app.get("/my-parcel", async (req, res) => {
       const { startDate, endDate } = req.query;
-      const query = {};
+    
 
-      if (startDate && endDate) {
-        console.log(`Received startDate: ${startDate}, endDate: ${endDate}`);
-
+    
+      if (startDate || endDate) {
         const start = new Date(startDate);
-        const end = new Date(endDate);
-
-        if (isNaN(start) || isNaN(end)) {
-          return res.status(400).send({ error: "Invalid date format" });
-        }
-
-        query.requestedDeliveryDate = {
-          $gte: start,
-          $lte: end,
-        };
-      } else {
-        return res
-          .status(400)
-          .send({ error: "Both startDate and endDate are required" });
-      }
-
+      const end = new Date(endDate);
+      
+    
       try {
-        // Log all documents for debugging
-        const allDocuments = await bookParcelCollection.find({}).toArray();
-        console.log(`All documents: ${JSON.stringify(allDocuments, null, 2)}`);
-
-        // Perform the query
-        const result = await bookParcelCollection.find().toArray();
-        console.log(`Query: ${JSON.stringify(query)}`); // Log the query
-        console.log(`Result: ${JSON.stringify(result)}`); // Log the result
-        console.log(result);
+        const query = {
+          requestedDeliveryDate: {
+            $gte: start.toISOString(), 
+            $lte: end.toISOString(),  
+          }
+        };
+        
+    
+        const result = await bookParcelCollection.find(query).toArray();
         res.send(result);
       } catch (error) {
         console.error(error);
         res.status(500).send({ error: "Internal Server Error" });
+      };
+      }else{
+        const result = await bookParcelCollection.find().toArray();
+        res.send(result);
       }
+      
     });
-
+    
     app.get("/users", async (req, res) => {
       const { role } = req.query;
 
@@ -268,8 +266,91 @@ async function run() {
     app.post("/reviews", async (req, res) => {
       const data = req.body;
       const result = await reviewsCollection.insertOne(data);
+      
       res.send(result);
     });
+    // Route to get bookings by date
+    app.get("/statistics/bookings-by-date", async (req, res) => {
+      try {
+        // Fetch all documents from the collection
+        const allBookings = await bookParcelCollection.find().toArray();
+        const bookingsByDate = {};
+    
+        // Process the data to count the number of orders for each booking date
+        allBookings.forEach(booking => {
+          const bookingDate = booking.booking_date; // Booking date in 'MM-DD-YYYY' format
+    
+          // Ensure the date string is correctly parsed and compared
+          if (bookingsByDate[bookingDate]) {
+            bookingsByDate[bookingDate]++;
+          } else {
+            bookingsByDate[bookingDate] = 1;
+          }
+        });
+    
+        // Format the response data
+        const data = Object.keys(bookingsByDate).map(date => ({
+          date,
+          count: bookingsByDate[date]
+        }));
+    
+        // Sort the data by date
+        data.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+        // Send the response
+        res.send(data);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    app.get("/statistics/booking-delivery-comparison", async (req, res) => {
+      try {
+        const allBookings = await bookParcelCollection.find().toArray();
+        const bookingsByDate = {};
+        const deliveriesByDate = {};
+    
+        allBookings.forEach(booking => {
+          const bookingDate = booking.booking_date;
+          const deliveryDate = booking.status === "Delivered" ? booking.requestedDeliveryDate : null;
+    
+          // Count bookings by date
+          if (bookingsByDate[bookingDate]) {
+            bookingsByDate[bookingDate]++;
+          } else {
+            bookingsByDate[bookingDate] = 1;
+          }
+    
+          // Count deliveries by date
+          if (deliveryDate) {
+            if (deliveriesByDate[deliveryDate]) {
+              deliveriesByDate[deliveryDate]++;
+            } else {
+              deliveriesByDate[deliveryDate] = 1;
+            }
+          }
+        });
+    
+        const allDates = Array.from(new Set([...Object.keys(bookingsByDate), ...Object.keys(deliveriesByDate)]));
+    
+        const data = allDates.map(date => ({
+          date,
+          bookings: bookingsByDate[date] || 0,
+          deliveries: deliveriesByDate[date] || 0,
+        }));
+    
+        data.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+        res.send(data);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+    
+
+
     app.get("/reviews/:email", async (req, res) => {
       const query = {
         reviewEmail: req.params.email,
