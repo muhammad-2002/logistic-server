@@ -90,6 +90,14 @@ async function run() {
       const result = await topDeliveryMan.find().toArray();
       res.send(result);
     });
+    app.get('/count-number',async(req,res)=>{
+      const query ={status:'Delivered'}
+     const totalUser = await userInfo.estimatedDocumentCount()
+     const totalDelivery = await bookParcelCollection.find(query).toArray()
+     const totalBookedParcel = await bookParcelCollection.estimatedDocumentCount()
+     
+     res.send({totalUser,totalDelivery,totalBookedParcel})
+    })
     app.post("/users", async (req, res) => {
       const user = req.body;
       const email = req.body.email;
