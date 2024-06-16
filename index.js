@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 dotenv.config();
+const jwt = require('jsonwebtoken')
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -28,6 +29,63 @@ async function run() {
     const userInfo = database.collection("userInfo");
     const bookParcelCollection = database.collection("book-parcel");
     const reviewsCollection = database.collection("reviews");
+    const PaymentCollection = database.collection("payment");
+
+    app.post("/jwt", async (req, res) => {
+      const token = jwt.sign(
+        {
+          token: req.body.email,
+        },
+        process.env.TOKEN_SEERECT_KEY,
+        { expiresIn: "1hr" }
+      );
+     
+      res.send({ token });
+    });
+
+    const verifyToken = (req, res, next) => {
+      const token = req.headers.authorization;
+      console.log(token);
+
+      if (!token) {
+        return res.status(401).send({ message: "UnAuthorized" });
+      }
+      const accessToken = token.split(" ")[1];
+      if (accessToken) {
+        jwt.verify(
+          accessToken,
+          process.env.TOKEN_SEERECT_KEY,
+          (err, decoded) => {
+            if (err) {
+              return res.status(401).send({ message: "forbidden access" });
+            }
+            req.decode = decoded;
+            next();
+          }
+        );
+      }
+    };
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decode?.token;
+      const query = { email: email };
+      const admin = await userInfo.findOne(query);
+      const isAdmin = admin?.role === "admin";
+      if (!isAdmin) {
+        return res.status(401).send({ message: "Forbidden Access" });
+      }
+      next();
+    };
+    const verifyDeliveryMan = async (req, res, next) => {
+      const email = req.decode?.token;
+      const query = { email: email };
+      const admin = await userInfo.findOne(query);
+      const isAdmin = admin?.role === "deliveryMan";
+      if (!isAdmin) {
+        return res.status(401).send({ message: "Forbidden Access" });
+      }
+      next();
+    };
+
     app.get("/top-delivery-man", async (req, res) => {
       const result = await topDeliveryMan.find().toArray();
       res.send(result);
@@ -65,7 +123,7 @@ async function run() {
       res.send(result);
     });
     //update user
-    app.patch("/profile-update/:id", async (req, res) => {
+    app.patch("/profile-update/:id",verifyToken, async (req, res) => {
       const id = req.params.id;
       const image = req.body;
       const query = { _id: new ObjectId(id) };
@@ -165,7 +223,7 @@ async function run() {
       }
     });
     
-    app.patch("/users/:id", async (req, res) => {
+    app.patch("/users/:id",verifyToken,verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const body = req.body;
       const query = {
@@ -216,7 +274,7 @@ async function run() {
         res.status(500).json({ message: err.message });
       }
     });
-    app.put("/parcels/:id", async (req, res) => {
+    app.put("/parcels/:id",verifyToken,verifyDeliveryMan, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const data = req.body;
@@ -358,6 +416,26 @@ async function run() {
       }
     });
     
+    app.post('/api/payment', async (req, res) => {
+      const data = req.body;
+      console.log(data)
+   
+
+      try {
+       const payment = await PaymentCollection.insertOne(data)
+        res.send({
+          success: true,
+          message: 'Payment successful',
+          payment,
+        });
+      } catch (error) {
+        res.json({
+          success: false,
+          message: 'Payment failed',
+          error,
+        });
+      }
+    });
 
 
     app.get("/reviews/:email", async (req, res) => {
