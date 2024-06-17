@@ -25,7 +25,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const database = client.db("logistic-international");
-    const topDeliveryMan = database.collection("bestDeliveryBoy");
+   
     const userInfo = database.collection("userInfo");
     const bookParcelCollection = database.collection("book-parcel");
     const reviewsCollection = database.collection("reviews");
@@ -295,9 +295,6 @@ async function run() {
         res.status(500).json({ error: error.message });
       }
     });
-    
-    
-
     // my boking updated
     app.patch("/update-parcel/:id", async (req, res) => {
       const id = req.params.id;
@@ -489,8 +486,6 @@ async function run() {
         });
       }
     });
-
-
     app.get("/reviews/:email", async (req, res) => {
       const query = {
         reviewEmail: req.params.email,
@@ -511,3 +506,5 @@ run().catch(console.dir);
 
 //listening
 app.listen(port, () => console.log(`listening port : ${port}`));
+
+// ///////////////// Finish Server side ////////////////////////////
