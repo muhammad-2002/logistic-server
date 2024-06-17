@@ -86,10 +86,55 @@ async function run() {
       next();
     };
 
-    app.get("/top-delivery-man", async (req, res) => {
-      const result = await topDeliveryMan.find().toArray();
-      res.send(result);
+    app.get('/top-delivery-man', async (req, res) => {
+      try {
+        // Query to get all delivery men
+        const query = { role: "deliveryMan" };
+        const deliveryMen = await userInfo.find(query).toArray();
+        const reviews = await reviewsCollection.find().toArray();
+
+        // Calculate number of parcels delivered and average ratings
+        const deliveryManStats = deliveryMen.map(deliveryMan => {
+          const deliveryManReviews = reviews.filter(review => 
+            {
+              
+              return review.deliveryManId.toString() === deliveryMan._id.toString()
+            
+            }
+          );
+        
+
+          // Calculate the average rating
+          const averageRatings= deliveryManReviews.reduce((acc, review) => acc + review.rating, 0) / (deliveryManReviews.length || 1);
+         const averageRating = averageRatings.toFixed(2)
+          const numberOfParcelsDelivered = deliveryMan.deliveryCount;
+
+          return {
+            ...deliveryMan,
+            numberOfParcelsDelivered,
+            averageRating
+          };
+        });
+
+        // Sort delivery men based on number of parcels delivered and average ratings
+        deliveryManStats.sort((a, b) => {
+          if (b.numberOfParcelsDelivered !== a.numberOfParcelsDelivered) {
+            return b.numberOfParcelsDelivered - a.numberOfParcelsDelivered;
+          }
+          return b.averageRating - a.averageRating;
+        });
+
+        // Get top 3 delivery men
+        const top3DeliveryMen = deliveryManStats.slice(0, 3)
+
+        res.json(top3DeliveryMen);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send('Internal Server Error');
+      }
     });
+
+
     app.get('/count-number',async(req,res)=>{
       const query ={status:'Delivered'}
      const totalUser = await userInfo.estimatedDocumentCount()
